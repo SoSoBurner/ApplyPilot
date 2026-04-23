@@ -40,13 +40,30 @@ def _build_tailor_prompt(profile: dict) -> str:
     boundary = profile.get("skills_boundary", {})
     resume_facts = profile.get("resume_facts", {})
 
-    # Format skills boundary for the prompt
+    # Format skills boundary for the prompt.
+    # Keys that already contain spaces or uppercase are used as-is so profiles
+    # for non-software roles can produce labels like "RV & Camp Experience".
+    def _fmt_label(key: str) -> str:
+        if " " in key or any(c.isupper() for c in key):
+            return key
+        return key.replace("_", " ").title()
+
     skills_lines = []
+    schema_keys: list[str] = []
     for category, items in boundary.items():
         if isinstance(items, list) and items:
-            label = category.replace("_", " ").title()
+            label = _fmt_label(category)
             skills_lines.append(f"{label}: {', '.join(items)}")
+            schema_keys.append(label)
     skills_block = "\n".join(skills_lines)
+
+    # Build the JSON schema for the skills object dynamically from the profile's
+    # categories. This lets non-software profiles (sales, security, hospitality,
+    # etc.) get relevant section headings instead of hardcoded "Languages" etc.
+    if schema_keys:
+        skills_schema = "{" + ",".join(f'"{k}":"..."' for k in schema_keys) + "}"
+    else:
+        skills_schema = '{"Skills":"..."}'
 
     # Preserved entities
     companies = resume_facts.get("preserved_companies", [])
@@ -76,7 +93,7 @@ Take the base resume and job description. Return a tailored resume as a JSON obj
 ## SKILLS BOUNDARY (real skills only):
 {skills_block}
 
-You MAY add 2-3 closely related tools (Kubernetes if Docker, Terraform if AWS, Redis if PostgreSQL). No unrelated languages/frameworks.
+You MAY add 2-3 closely related skills the candidate would plausibly know given their existing stack. No skills from a completely different domain.
 
 ## TAILORING RULES:
 
@@ -93,9 +110,9 @@ PROJECTS: Reorder by relevance. Drop irrelevant projects entirely.
 BULLETS: Strong verb + what you built + quantified impact. Vary verbs (Built, Designed, Implemented, Reduced, Automated, Deployed, Operated, Optimized). Most relevant first. Max 4 per section.
 
 ## VOICE:
-- Write like a real engineer. Short, direct.
-- GOOD: "Automated financial reporting with Python + API integrations, cut processing time from 10 hours to 2"
-- BAD: "Leveraged cutting-edge AI technologies to drive transformative operational efficiencies"
+- Write like a real professional. Short, direct.
+- GOOD: "Closed 200+ high-trust consultations; grew revenue 40% year over year"
+- BAD: "Leveraged cutting-edge strategies to drive transformative business outcomes"
 - BANNED WORDS (using ANY of these = validation failure — do not use them even once):
   {banned_str}
 - No em dashes. Use commas, periods, or hyphens.
@@ -108,8 +125,9 @@ BULLETS: Strong verb + what you built + quantified impact. Vary verbs (Built, De
 - Must fit 1 page.
 
 ## OUTPUT: Return ONLY valid JSON. No markdown fences. No commentary. No "here is" preamble.
+Each skills category value MUST be a single comma-separated string, not a list. Example: "Safety & Security":"Perimeter Patrol, Emergency Response, Conflict Resolution".
 
-{{"title":"Role Title","summary":"2-3 tailored sentences.","skills":{{"Languages":"...","Frameworks":"...","DevOps & Infra":"...","Databases":"...","Tools":"..."}},"experience":[{{"header":"Title at Company","subtitle":"Tech | Dates","bullets":["bullet 1","bullet 2","bullet 3","bullet 4"]}}],"projects":[{{"header":"Project Name - Description","subtitle":"Tech | Dates","bullets":["bullet 1","bullet 2"]}}],"education":"{school} | {education_level}"}}"""
+{{"title":"Role Title","summary":"2-3 tailored sentences.","skills":{skills_schema},"experience":[{{"header":"Title at Company","subtitle":"Context | Dates","bullets":["bullet 1","bullet 2","bullet 3","bullet 4"]}}],"projects":[{{"header":"Project Name - Description","subtitle":"Context | Dates","bullets":["bullet 1","bullet 2"]}}],"education":"{school} | {education_level}"}}"""
 
 
 def _build_judge_prompt(profile: dict) -> str:
@@ -233,7 +251,7 @@ def assemble_resume_text(data: dict, profile: dict) -> str:
 
     # Header -- always code-injected from profile
     lines.append(personal.get("full_name", ""))
-    lines.append(sanitize_text(data.get("title", "Software Engineer")))
+    lines.append(sanitize_text(data.get("title", profile.get("experience", {}).get("target_role", ""))))
 
     # Location from search config or profile -- leave blank if not available
     # The location line is optional; the original used a hardcoded city.
@@ -262,6 +280,8 @@ def assemble_resume_text(data: dict, profile: dict) -> str:
     lines.append("TECHNICAL SKILLS")
     if isinstance(data["skills"], dict):
         for cat, val in data["skills"].items():
+            if isinstance(val, list):
+                val = ", ".join(str(x) for x in val)
             lines.append(f"{cat}: {sanitize_text(str(val))}")
     lines.append("")
 
