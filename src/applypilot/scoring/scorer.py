@@ -29,10 +29,11 @@ SCORING CRITERIA:
 - 1-2: Poor match. Completely different field or experience level.
 
 IMPORTANT FACTORS:
-- Weight technical skills heavily (programming languages, frameworks, tools)
-- Consider transferable experience (automation, scripting, API work)
-- Factor in the candidate's project experience
-- Be realistic about experience level vs. job requirements (years of experience, seniority)
+- Weight the candidate's stated skills and real experience heavily, based on their resume — not any hypothetical tech stack.
+- Give strong credit for direct experience in the same role, industry, or setting.
+- Consider transferable experience across related roles (e.g., festival security experience transfers to campground security; hospitality experience transfers across guest-facing roles).
+- Factor in relevant certifications and project experience.
+- Be realistic about experience level vs. job requirements (years of experience, seniority).
 
 RESPOND IN EXACTLY THIS FORMAT (no other text):
 SCORE: [1-10]
