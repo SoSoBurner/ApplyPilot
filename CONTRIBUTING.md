@@ -131,16 +131,18 @@ ApplyPilot/
 ├── src/applypilot/       # Main package
 │   ├── __init__.py
 │   ├── cli.py            # CLI entry points
-│   ├── discover/         # Stage 1: job discovery scrapers
-│   ├── enrich/           # Stage 2: description extraction
-│   ├── score/            # Stage 3: AI scoring
-│   ├── tailor/           # Stage 4: resume tailoring
-│   ├── cover/            # Stage 5: cover letter generation
-│   ├── apply/            # Stage 6: browser automation
-│   └── utils/            # Shared utilities
-├── config/               # Default configuration files
+│   ├── pipeline.py       # Pipeline orchestration
+│   ├── config.py         # Config loading
+│   ├── database.py       # SQLite persistence
+│   ├── llm.py            # LLM provider abstraction
+│   ├── view.py           # HTML dashboard rendering
+│   ├── discovery/        # Stage 1: job discovery scrapers (JobSpy, Workday, smart extract)
+│   ├── enrichment/       # Stage 2: description extraction
+│   ├── scoring/          # Stages 3-5: scoring, tailoring, cover letter, validator, PDF
+│   ├── apply/            # Stage 6: browser automation (chrome, launcher, dashboard, prompt)
+│   ├── wizard/           # First-run setup (applypilot init)
+│   └── config/           # Shipped YAML configs (employers, sites, example searches)
 ├── tests/                # Test suite
-├── docs/                 # Documentation
 └── pyproject.toml        # Package configuration
 ```
 
