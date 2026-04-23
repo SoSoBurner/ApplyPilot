@@ -88,6 +88,7 @@ def run(
     workers: int = typer.Option(1, "--workers", "-w", help="Parallel threads for discovery/enrichment stages."),
     stream: bool = typer.Option(False, "--stream", help="Run stages concurrently (streaming mode)."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview stages without executing."),
+    rescore: bool = typer.Option(False, "--rescore", help="Re-score ALL jobs, not just unscored ones. Useful after changing the scoring prompt."),
     validation: str = typer.Option(
         "normal",
         "--validation",
@@ -137,6 +138,7 @@ def run(
         stream=stream,
         workers=workers,
         validation_mode=validation,
+        rescore=rescore,
     )
 
     if result.get("errors"):

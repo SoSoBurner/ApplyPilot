@@ -16,7 +16,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from applypilot.config import APP_DIR
+from applypilot.config import APP_DIR, DEFAULTS
 from applypilot.database import get_connection
 
 console = Console()
@@ -72,14 +72,20 @@ def generate_dashboard(output_path: str | None = None) -> str:
     """).fetchall()
 
     # All scored jobs (5+), ordered by score desc
-    jobs = conn.execute("""
+    # Dashboard shows jobs at or above the configured min_score threshold.
+    # Below this threshold, jobs don't proceed to tailor/cover anyway, so they
+    # only add noise to the dashboard.
+    min_score = DEFAULTS.get("min_score", 5)
+    jobs = conn.execute(
+        f"""
         SELECT url, title, salary, description, location, site, strategy,
                full_description, application_url, detail_error,
                fit_score, score_reasoning
         FROM jobs
-        WHERE fit_score >= 5
+        WHERE fit_score >= {int(min_score)}
         ORDER BY fit_score DESC, site, title
-    """).fetchall()
+        """
+    ).fetchall()
 
     # Color map per site
     colors = {

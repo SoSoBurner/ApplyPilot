@@ -10,7 +10,7 @@ import re
 import time
 from datetime import datetime, timezone
 
-from applypilot.config import RESUME_PATH
+from applypilot.config import RESUME_PATH, load_profile
 from applypilot.database import get_connection, get_jobs_by_stage
 from applypilot.llm import get_client
 
@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 # ── Scoring Prompt ────────────────────────────────────────────────────────
 
-SCORE_PROMPT = """You are a job fit evaluator. Given a candidate's resume and a job description, score how well the candidate fits the role.
+_BASE_PROMPT = """You are a job fit evaluator. Given a candidate's resume and a job description, score how well the candidate fits the role.
 
 SCORING CRITERIA:
 - 9-10: Perfect match. Candidate has direct experience in nearly all required skills and qualifications.
@@ -39,6 +39,33 @@ RESPOND IN EXACTLY THIS FORMAT (no other text):
 SCORE: [1-10]
 KEYWORDS: [comma-separated ATS keywords from the job description that match or could match the candidate]
 REASONING: [2-3 sentences explaining the score]"""
+
+
+def _build_score_prompt(profile: dict | None = None) -> str:
+    """Build the scoring prompt, injecting the user's target role for scope enforcement.
+
+    If profile.experience.target_role is set, add a hard scope rule that
+    jobs outside the target scope get capped at 1-3 regardless of how much
+    transferable experience the candidate has. This prevents e.g. "Summer
+    Camp Counselor" or "Boot Camp Host" from scoring 5-6 when the user's
+    target is "Camp Host / Workamper".
+    """
+    if not profile:
+        return _BASE_PROMPT
+
+    target_role = profile.get("experience", {}).get("target_role", "").strip()
+    if not target_role:
+        return _BASE_PROMPT
+
+    scope_rule = f"""
+
+HARD SCOPE RULE (non-negotiable):
+The candidate is ONLY seeking roles in this scope: {target_role}
+- Jobs clearly within this scope (e.g. campground host, RV park office, workamper, park/campground security/patrol, RV resort guest services) score normally on the 1-10 rubric.
+- Jobs clearly OUTSIDE this scope (e.g. summer day camp for kids, youth camp counselor, fitness boot camp, corporate event host, restaurant server, unrelated security/patrol at offices or retail) score 1-3 maximum regardless of how much transferable experience the candidate has.
+- When in doubt whether a job is in scope, favor a lower score."""
+
+    return _BASE_PROMPT + scope_rule
 
 
 def _parse_score_response(response: str) -> dict:
@@ -70,12 +97,13 @@ def _parse_score_response(response: str) -> dict:
     return {"score": score, "keywords": keywords, "reasoning": reasoning}
 
 
-def score_job(resume_text: str, job: dict) -> dict:
+def score_job(resume_text: str, job: dict, profile: dict | None = None) -> dict:
     """Score a single job against the resume.
 
     Args:
         resume_text: The candidate's full resume text.
         job: Job dict with keys: title, site, location, full_description.
+        profile: Optional user profile — if provided, target_role enforces scope.
 
     Returns:
         {"score": int, "keywords": str, "reasoning": str}
@@ -88,7 +116,7 @@ def score_job(resume_text: str, job: dict) -> dict:
     )
 
     messages = [
-        {"role": "system", "content": SCORE_PROMPT},
+        {"role": "system", "content": _build_score_prompt(profile)},
         {"role": "user", "content": f"RESUME:\n{resume_text}\n\n---\n\nJOB POSTING:\n{job_text}"},
     ]
 
@@ -112,6 +140,10 @@ def run_scoring(limit: int = 0, rescore: bool = False) -> dict:
         {"scored": int, "errors": int, "elapsed": float, "distribution": list}
     """
     resume_text = RESUME_PATH.read_text(encoding="utf-8")
+    try:
+        profile = load_profile()
+    except FileNotFoundError:
+        profile = None
     conn = get_connection()
 
     if rescore:
@@ -138,7 +170,7 @@ def run_scoring(limit: int = 0, rescore: bool = False) -> dict:
     results: list[dict] = []
 
     for job in jobs:
-        result = score_job(resume_text, job)
+        result = score_job(resume_text, job, profile)
         result["url"] = job["url"]
         completed += 1
 
